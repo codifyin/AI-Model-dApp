@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Model Marketplace</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+
+        h1, h2 {
+            color: #007bff;
+        }
+
+        form {
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px solid #007bff;
+            border-radius: 5px;
+            background-color: white;
+        }
+
+        input {
+            margin-right: 10px;
+            padding: 10px;
+            border: 1px solid #007bff;
+            border-radius: 5px;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: white;
+        }
+
+        th, td {
+            border: 1px solid #007bff;
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+    </style>
+</head>
+<body>
+    <h1>AI Model Marketplace</h1>
+
+    <h2>List a New AI Model</h2>
+    <form id="listModelForm">
+        <input type="text" id="modelName" placeholder="Model Name" required>
+        <input type="text" id="modelDescription" placeholder="Description" required>
+        <input type="number" id="modelPrice" placeholder="Price (in wei)" required>
+        <button type="submit">List Model</button>
+    </form>
+
+    <h2>Available Models</h2>
+    <button onclick="loadModels()">Refresh</button>
+    <table id="modelTable">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Price (wei)</th>
+                <th>Creator</th>
+                <th>Average Rating</th>
+            </tr>
+        </thead>
+        <tbody id="modelList"></tbody>
+    </table>
+
+    <h2>Purchase a Model</h2>
+    <input type="number" id="purchaseModelId" placeholder="Model ID">
+    <button id="purchaseModelButton">Purchase Model</button>
+
+    <h2>Rate a Model</h2>
+    <input type="number" id="rateModelId" placeholder="Model ID">
+    <input type="number" id="modelRating" placeholder="Rating (1-5)">
+    <button id="rateModelButton">Rate Model</button>
+
+    <h2>Withdraw Funds</h2>
+    <button id="withdrawFundsButton">Withdraw Funds</button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/web3/1.6.0/web3.min.js"></script>
+    <script>
+        let contract;
+        const contractAddress = '0xfA4e0cfD92029D68F86F1C0A704700dDd3df8163'; 
+        let contractABI;
+
+        async function fetchABI() {
+            const response = await fetch('abi.json');
+            contractABI = await response.json();
+            initializeContract();
+        }
+
+        // Initialize contract
+        async function initializeContract() {
+            const web3 = new Web3(Web3.givenProvider || "http://localhost:8545");
+            contract = new web3.eth.Contract(contractABI, contractAddress);
+            await loadModels();
+        }
+
+        window.onload = fetchABI;
+
+        document.getElementById('listModelForm').onsubmit = async (event) => {
+            event.preventDefault();
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            const name = document.getElementById('modelName').value;
+            const description = document.getElementById('modelDescription').value;
+            const price = document.getElementById('modelPrice').value;
+
+            await contract.methods.listModel(name, description, price).send({ from: accounts[0] });
+            loadModels();
+        };
+
+        document.getElementById('purchaseModelButton').onclick = async () => {
+            const modelId = document.getElementById('purchaseModelId').value;
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            const model = await contract.methods.models(modelId).call();
+            
+            await contract.methods.purchaseModel(modelId).send({ from: accounts[0], value: model.price });
+            loadModels();
+        };
+
+        document.getElementById('rateModelButton').onclick = async () => {
+            const modelId = document.getElementById('rateModelId').value;
+            const rating = document.getElementById('modelRating').value;
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+
+            await contract.methods.rateModel(modelId, rating).send({ from: accounts[0] });
+            loadModels();
+        };
+
+        document.getElementById('withdrawFundsButton').onclick = async () => {
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            await contract.methods.withdrawFunds().send({ from: accounts[0] });
+        };
+
+        async function loadModels() {
+            const modelList = document.getElementById('modelList');
+            modelList.innerHTML = '';
+
+            const modelCount = await contract.methods.getModelCount().call();
+            console.log("Model count: " + modelCount);
+            for (let i = 0; i < modelCount; i++) {
+                const model = await contract.methods.models(i).call();
+                const averageRating = model.ratingCount > 0 ? (model.totalRating / model.ratingCount).toFixed(1) : 'N/A';
+                
+                modelList.innerHTML += `
+                    <tr>
+                        <td>${i}</td>
+                        <td>${model.name}</td>
+                        <td>${model.description}</td>
+                        <td>${model.price}</td>
+                        <td>${model.creator}</td>
+                        <td>${averageRating}</td>
+                    </tr>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
